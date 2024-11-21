@@ -6,6 +6,9 @@ function App() {
   
   return (
     <>
+    <UserContext.Provider>
+      
+    </UserContext.Provider>
     </>
   )
 }
