@@ -6,7 +6,7 @@ function App() {
 
   return (
     <>
-       <div className="w-screen h-screen duration-300  "
+       <div className="w-screen h-screen duration-300 ease-in-out transition-all flex justify-center items-center"
     style={{backgroundColor: color}}
     >
       <div className="fixed flex flex-wrap justify-center bottom-12 inset-x-0 px-2">
