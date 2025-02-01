@@ -3,7 +3,8 @@
 #to set the execution policy to allow scripts to run
 Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
 #to create a new project 
-npm create vite@latest
+npm create vite@latest 
+
 ```
 #### install the dependencies
 ```bash
