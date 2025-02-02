@@ -16,15 +16,19 @@ npm run dev
 ```
 ### adding tailwind css
 ```bash
-npm install -D tailwindcss postcss autoprefixer
-npx tailwindcss init -p
+npm install tailwindcss @tailwindcss/vite
 ```
+### add the tailwind in vite.config.js
+```javascript
+import tailwindcss from '@tailwindcss/vite'
+// add this to plugin
+ tailwindcss(),
+```
+
 ### add the tailwind directives to the css file
 ```bash
 # ./src/index.css 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 ```
 
 ### add react router
