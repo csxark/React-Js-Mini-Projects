@@ -16,7 +16,7 @@ npm run dev
 ```
 ### adding tailwind css
 ```bash
-npm install tailwindcss @tailwindcss/vite
+npm install tailwindcss @tailwindcss/vite 
 ```
 ### add the tailwind in vite.config.js
 ```javascript
@@ -29,6 +29,9 @@ import tailwindcss from '@tailwindcss/vite'
 ```bash
 # ./src/index.css 
 @import "tailwindcss";
+
+# For dark mode add this also
+@custom-variant dark (&:where(.dark, .dark *));
 ```
 
 ### add react router

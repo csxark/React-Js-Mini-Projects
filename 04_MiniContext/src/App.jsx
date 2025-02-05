@@ -1,4 +1,3 @@
-import './App.css'
 import Login from './components/Login'
 import Profile from './components/Profile'
 import UserContextProvider from './context/UseContextProvider' 
@@ -8,10 +7,10 @@ function App() {
 
   return (
     <UserContextProvider>
-      <section className='flex flex-col justify-center items-center h-screen bg-slate-700 text-white'>
-      <h1>React with Chai and share is important</h1>
+      <section className="flex flex-col items-center justify-center h-screen bg-slate-500 text-center text-gray-900">
       <Login />
-      <Profile /></section>
+      <Profile />
+      </section>
     </UserContextProvider>
   )
 }
