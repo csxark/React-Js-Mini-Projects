@@ -39,3 +39,11 @@ import tailwindcss from '@tailwindcss/vite'
 npm install react-router-dom
 ```
 
+### Redux Toolkit
+```bash
+npm install @reduxjs/toolkit
+
+npm install react-redux
+```
+
+
