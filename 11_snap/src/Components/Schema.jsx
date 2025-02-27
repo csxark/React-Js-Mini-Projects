@@ -4,7 +4,7 @@ export const Schema = () => {
         {JSON.stringify({
           "@context": "https://schema.org",
           "@type": "HomeAndConstructionBusiness",
-          "name": "SERVICE-LO",
+          "name": "SnapFix",
           "image": "/logo.png",
           "description": "Professional home services including carpentry, electrical, plumbing, and painting services.",
           "address": {
