@@ -1,5 +1,6 @@
 // Navbar.js
 import { useState } from 'react';
+import logoImage from '../assets/logow.jpg';  // Add this import
 
 export const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -7,13 +8,13 @@ export const Navbar = () => {
   return (
     <nav className="relative w-full bg-white shadow-lg z-30 animate-slide-in-top">
       <div className="container mx-auto px-4 flex justify-between items-center h-20">
-        {/* Logo */}
-        <a href="#" className="flex items-center space-x-2">
-          <img src="/logo.png" alt="SnapFix Logo" className="h-12" />
-          <span className="text-2xl font-bold text-orange-600">SnapFix</span>
-        </a>
+  
+          <a href="#" className="flex items-center space-x-2">
+            <img src={logoImage} alt="SnapFix Logo" className="h-20 mix-blend-multiply bg-blend-saturation" />
+            <span className="text-2xl font-bold text-orange-600">SnapFix</span>
+          </a>
 
-        {/* Mobile Menu Button */}
+          {/* Mobile Menu Button */}
         <button
           className="md:hidden p-2 rounded-lg hover:bg-orange-50 transition-colors"
           onClick={() => setIsOpen(!isOpen)}

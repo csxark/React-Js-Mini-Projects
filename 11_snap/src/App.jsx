@@ -5,7 +5,7 @@ import Footer from './components/Footer'
 import HeroSection from './components/HeroSection'
 import FeaturedServices from './components/FeaturedServices'
 import WhyChooseUs from './components/WhyChooseUs'
-import Testimonials from './components/Testimonials'
+// import Testimonials from './components/Testimonials'
 function App() {
   
 
@@ -15,7 +15,7 @@ function App() {
       <HeroSection />
       <FeaturedServices />
       <WhyChooseUs />
-      <Testimonials />
+      {/* <Testimonials /> */}
       <Footer />
     </>
   )
