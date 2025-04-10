@@ -20,6 +20,12 @@ export default [
       'react-hooks': reactHooks,
       'react-refresh': reactRefresh,
     },
+    "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
     rules: {
       ...js.configs.recommended.rules,
       ...reactHooks.configs.recommended.rules,
