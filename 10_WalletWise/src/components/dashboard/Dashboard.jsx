@@ -12,7 +12,6 @@ import { Label } from '@/components/ui/label';
 const Dashboard = ({
   balance,
   savings,
-  goalProgress,
   minMonthlyBalance,
   currentMonthTotal,
   previousMonthTotal,
@@ -122,22 +121,6 @@ const Dashboard = ({
                 Perk Eligible
               </Badge>
             )}
-          </div>
-        </CardContent>
-      </Card>
-      
-      {/* Progress Towards Goals */}
-      <Card className="bg-slate-800 border-slate-700">
-        <CardHeader>
-          <CardTitle>Summer Vacation Goal</CardTitle>
-          <CardDescription className="text-slate-400">₹{goalProgress * 500} of ₹50,000 saved</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Progress value={goalProgress} className="h-2 mb-2 bg-slate-700" />
-          <div className="flex justify-between text-sm text-slate-400">
-            <span>0%</span>
-            <span>{goalProgress}%</span>
-            <span>100%</span>
           </div>
         </CardContent>
       </Card>

@@ -1,6 +1,17 @@
 // src/utils/categoryUtils.js
-import { categories } from '../data/mockData';
-import { CreditCard } from 'lucide-react';
+import { CreditCard, ShoppingBag, Coffee, Home, Car, Plane, Book, Gift } from 'lucide-react';
+
+// Define categories that map to the database schema
+export const categories = [
+  { id: 'shopping', name: 'Shopping', icon: <ShoppingBag className="h-4 w-4" />, color: "#10B981" },
+  { id: 'food', name: 'Food & Drinks', icon: <Coffee className="h-4 w-4" />, color: "#F59E0B" },
+  { id: 'housing', name: 'Housing', icon: <Home className="h-4 w-4" />, color: "#3B82F6" },
+  { id: 'transport', name: 'Transport', icon: <Car className="h-4 w-4" />, color: "#8B5CF6" },
+  { id: 'travel', name: 'Travel', icon: <Plane className="h-4 w-4" />, color: "#EC4899" },
+  { id: 'education', name: 'Education', icon: <Book className="h-4 w-4" />, color: "#6366F1" },
+  { id: 'gifts', name: 'Gifts', icon: <Gift className="h-4 w-4" />, color: "#EF4444" },
+  { id: 'other', name: 'Other', icon: <CreditCard className="h-4 w-4" />, color: "#6B7280" }
+];
 
 // Function to get category icon
 export const getCategoryIcon = (categoryId) => {
@@ -15,7 +26,7 @@ export const getCategoryName = (categoryId) => {
 
 export const getCategoryColor = (categoryId) => {
   const category = categories.find(cat => cat.id === categoryId);
-  return category ? category.color : "#6C757D";
+  return category ? category.color : "#6B7280";
 };
 
 // Calculate category totals for charts
@@ -34,9 +45,11 @@ export const getCategoryData = (expenses) => {
     }
   });
   
-  return Object.keys(categoryTotals).map(key => ({
-    name: categories.find(cat => cat.id === key)?.name || key,
-    value: categoryTotals[key],
-    color: categories.find(cat => cat.id === key)?.color || "#6C757D"
-  })).filter(item => item.value > 0);
+  return Object.keys(categoryTotals)
+    .map(key => ({
+      name: getCategoryName(key),
+      value: categoryTotals[key],
+      color: getCategoryColor(key)
+    }))
+    .filter(item => item.value > 0);
 };

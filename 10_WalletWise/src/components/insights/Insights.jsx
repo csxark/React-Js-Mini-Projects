@@ -46,7 +46,7 @@ const Insights = ({ savingsHistory }) => {
             <AlertCircle className="h-4 w-4 text-blue-300" />
             <AlertTitle>Automate Your Savings</AlertTitle>
             <AlertDescription className="text-blue-200">
-              Set up automatic transfers to reach your goals faster.
+              Set up automatic transfers to build your savings consistently.
             </AlertDescription>
           </Alert>
           <Alert className="bg-purple-900 border-purple-800 text-purple-100">
@@ -60,7 +60,7 @@ const Insights = ({ savingsHistory }) => {
             <AlertCircle className="h-4 w-4 text-green-300" />
             <AlertTitle>Review Subscriptions</AlertTitle>
             <AlertDescription className="text-green-200">
-              Cancel unused subscriptions to save money every month.
+              Review and cancel unused subscriptions to save money monthly.
             </AlertDescription>
           </Alert>
         </CardContent>
