@@ -1,23 +1,23 @@
 // src/pages/GrowthQuest.jsx
-import React, { useState, useEffect } from 'react';
-import { PiggyBank } from 'lucide-react';
+import React from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
-import Dashboard from '../components/dashboard/Dashboard';
-import Expenses from '../components/expenses/Expenses';
-import Challenges from '../components/challenges/Challenges';
-import Insights from '../components/insights/Insights';
-import Header from '../components/layout/Header';
-import ExpenseAlert from '../components/layout/ExpenseAlert';
-import PerkAlert from '../components/layout/PerkAlert';
-import QuickActions from '../components/layout/QuickActions';
+import Dashboard from './components/dashboard/Dashboard';
+import Expenses from './components/expenses/Expenses';
+import Challenges from './components/challenges/Challenges';
+import Insights from './components/insights/Insights';
+import Header from './components/layout/Header';
+import ExpenseAlert from './components/layout/ExpenseAlert';
+import PerkAlert from './components/layout/PerkAlert';
+import QuickActions from './components/layout/QuickActions';
 
-import { useExpenses } from '../hooks/useExpenses';
-import { useBalance } from '../hooks/useBalance';
+import { useExpenses } from './hooks/useExpenses';
+import { useBalance } from './hooks/useBalance';
 
 export default function GrowthQuest() {
   const { 
     balance, 
+    setBalance,
     savings, 
     goalProgress, 
     minMonthlyBalance,
@@ -35,7 +35,6 @@ export default function GrowthQuest() {
 
   const {
     expenses,
-    setExpenses,
     expenseAmount,
     setExpenseAmount,
     expenseDescription,
@@ -43,16 +42,12 @@ export default function GrowthQuest() {
     expenseCategory,
     setExpenseCategory,
     showExpenseAlert,
-    setShowExpenseAlert,
     newExpense,
-    setNewExpense,
     currentMonthTotal,
-    setCurrentMonthTotal,
     previousMonthTotal,
     showPerkAlert,
-    setShowPerkAlert,
     handleAddExpense
-  } = useExpenses(balance, setBalance);
+  } = useExpenses(); 
 
   return (
     <div className="min-h-screen bg-slate-900 text-white p-4 md:p-6">
@@ -80,6 +75,8 @@ export default function GrowthQuest() {
         setTempMinBalance={setTempMinBalance}
         minMonthlyBalance={minMonthlyBalance}
         handleSetMinBalance={handleSetMinBalance}
+        balance={balance}
+        setBalance={setBalance}
       />
 
       <Tabs defaultValue="dashboard" className="w-full">
