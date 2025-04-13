@@ -4,9 +4,8 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { savingsHistory } from '../../data/mockData';
 
-const Insights = () => {
+const Insights = ({ savingsHistory }) => {
   return (
     <>
       <Card className="bg-slate-800 border-slate-700">
