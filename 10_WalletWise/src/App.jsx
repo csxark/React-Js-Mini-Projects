@@ -7,8 +7,14 @@ import Insights from './components/insights/Insights';
 import PerkAlert from './components/layout/PerkAlert';
 import ExpenseAlert from './components/layout/ExpenseAlert';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import Auth from './auth/Auth';
-import { getUserSettings, updateUserSettings, getUserExpenses, addExpense, getUserSavingsHistory } from './services/databaseServce';
+import Auth from './auth/Auth'; 
+import { 
+  getUserBalance, 
+  updateUserBalance, 
+  getUserExpenses, 
+  addExpense, 
+  getUserSavings,
+} from './services/databaseServce';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const DEFAULT_USER_SETTINGS = {
@@ -25,6 +31,7 @@ const AppContent = () => {
   const [expenses, setExpenses] = useState([]);
   const [savingsHistory, setSavingsHistory] = useState([]);
   const [userSettings, setUserSettings] = useState(DEFAULT_USER_SETTINGS);
+  const [username, setUsername] = useState('');
   
   // Dialog states
   const [showBalanceDialog, setShowBalanceDialog] = useState(false);
@@ -42,29 +49,89 @@ const AppContent = () => {
   // Show perk alert if spending less
   const showPerkAlert = userSettings && userSettings.current_month_total < userSettings.previous_month_total;
 
-  // Load user data when authenticated
+  // Get username when authenticated
   useEffect(() => {
-    const loadUserData = async () => {
-      if (!user?.id) return;
+    const getUserCredentials = async () => {
+      if (!user?.email) return;
       
       try {
-        // Load user settings
-        const settings = await getUserSettings(user.id);
-        if (settings) {
-          setUserSettings(settings);
+        const userData = await findUserByUsername(user.email.split('@')[0]);
+        if (userData) {
+          setUsername(userData.username);
         } else {
-          // Create default settings if none exist
-          const newSettings = await updateUserSettings(user.id, DEFAULT_USER_SETTINGS);
-          setUserSettings(newSettings || DEFAULT_USER_SETTINGS);
+          // Default to email prefix if not found
+          setUsername(user.email.split('@')[0]);
         }
+      } catch (error) {
+        console.error('Error getting user credentials:', error);
+        setUsername(user.email.split('@')[0]);
+      }
+    };
+    
+    getUserCredentials();
+  }, [user]);
+
+  // Load user data when authenticated and username is available
+  useEffect(() => {
+    const loadUserData = async () => {
+      if (!user?.id || !username) return;
+      
+      try {
+        // Load user balance
+        const balanceData = await getUserBalance(username);
+        
+        // Get current and previous month expenses
+        const now = new Date();
+        const currentMonth = now.getMonth() + 1;
+        const currentYear = now.getFullYear();
+        
+        // Calculate previous month and year
+        const prevMonth = currentMonth === 1 ? 12 : currentMonth - 1;
+        const prevYear = currentMonth === 1 ? currentYear - 1 : currentYear;
         
         // Load expenses
-        const userExpenses = await getUserExpenses(user.id);
+        const userExpenses = await getUserExpenses(username);
         setExpenses(userExpenses || []);
         
+        // Calculate current month total
+        const currentMonthExpenses = userExpenses.filter(expense => {
+          const expenseDate = new Date(expense.date);
+          return expenseDate.getMonth() + 1 === currentMonth && 
+                 expenseDate.getFullYear() === currentYear;
+        });
+        
+        const currentMonthTotal = currentMonthExpenses.reduce(
+          (total, expense) => total + parseFloat(expense.amount), 0
+        );
+        
+        // Calculate previous month total
+        const prevMonthExpenses = userExpenses.filter(expense => {
+          const expenseDate = new Date(expense.date);
+          return expenseDate.getMonth() + 1 === prevMonth && 
+                 expenseDate.getFullYear() === prevYear;
+        });
+        
+        const previousMonthTotal = prevMonthExpenses.reduce(
+          (total, expense) => total + parseFloat(expense.amount), 0
+        );
+        
         // Load savings history
-        const history = await getUserSavingsHistory(user.id);
+        const history = await getUserSavings(username);
         setSavingsHistory(history || []);
+        
+        // Calculate total savings
+        const totalSavings = history.reduce(
+          (total, month) => total + parseFloat(month.savings_amount || 0), 0
+        );
+        
+        // Set user settings
+        setUserSettings({
+          balance: balanceData?.current_balance || 0,
+          min_monthly_balance: balanceData?.min_monthly_balance || 0,
+          savings: totalSavings,
+          current_month_total: currentMonthTotal,
+          previous_month_total: previousMonthTotal
+        });
       } catch (error) {
         console.error('Error loading user data:', error);
         // Set default values in case of error
@@ -72,23 +139,26 @@ const AppContent = () => {
       }
     };
     
-    loadUserData();
-  }, [user]);
+    if (username) {
+      loadUserData();
+    }
+  }, [user, username]);
 
   // Edit balance handler
   const handleEditBalance = async () => {
-    if (!tempBalance || !user?.id) return;
+    if (!tempBalance || !username) return;
     
     try {
-      const updatedSettings = await updateUserSettings(user.id, {
-        ...userSettings,
-        balance: parseFloat(tempBalance)
-      });
+      const newBalance = parseFloat(tempBalance);
       
-      setUserSettings({
-        ...userSettings,
-        balance: updatedSettings?.balance || parseFloat(tempBalance)
-      });
+      // Update balance in database
+      await updateUserBalance(username, newBalance);
+      
+      // Update local state
+      setUserSettings(prev => ({
+        ...prev,
+        balance: newBalance
+      }));
       
       setShowBalanceDialog(false);
       setTempBalance('');
@@ -99,18 +169,26 @@ const AppContent = () => {
 
   // Set minimum balance handler
   const handleSetMinBalance = async () => {
-    if (!tempMinBalance || !user?.id) return;
+    if (!tempMinBalance || !username) return;
     
     try {
-      const updatedSettings = await updateUserSettings(user.id, {
-        ...userSettings,
-        min_monthly_balance: parseFloat(tempMinBalance)
-      });
+      const minBalance = parseFloat(tempMinBalance);
       
-      setUserSettings({
-        ...userSettings,
-        min_monthly_balance: updatedSettings?.min_monthly_balance || parseFloat(tempMinBalance)
-      });
+      // We'll need to modify the database service to support min_monthly_balance updates
+      // This is a placeholder implementation
+      const { data, error } = await supabase
+        .from('user_balance')
+        .update({ min_monthly_balance: minBalance })
+        .eq('username', username)
+        .select();
+      
+      if (error) throw error;
+      
+      // Update local state
+      setUserSettings(prev => ({
+        ...prev,
+        min_monthly_balance: minBalance
+      }));
       
       setShowMinBalanceDialog(false);
       setTempMinBalance('');
@@ -121,20 +199,22 @@ const AppContent = () => {
 
   // Add expense handler
   const handleAddExpense = async () => {
-    if (!expenseAmount || !expenseCategory || !user?.id || !userSettings) return;
+    if (!expenseAmount || !expenseCategory || !username) return;
     
     try {
       const amount = parseFloat(expenseAmount);
       
       const expenseData = {
-        description: expenseDescription || 'Expense',
-        amount: amount,
+        username: username,
         category: expenseCategory,
-        date: new Date().toISOString().slice(0, 10)
+        amount: amount,
+        description: expenseDescription || 'Expense',
+        date: new Date().toISOString().slice(0, 10),
+        time: new Date().toTimeString().slice(0, 8)
       };
       
       // Add expense to database
-      const addedExpense = await addExpense(user.id, expenseData);
+      const addedExpense = await addExpense(expenseData);
       
       if (!addedExpense) {
         throw new Error('Failed to add expense');
@@ -144,18 +224,11 @@ const AppContent = () => {
       const newBalance = (userSettings.balance || 0) - amount;
       const newMonthTotal = (userSettings.current_month_total || 0) + amount;
       
-      // Update user settings in database
-      const updatedSettings = await updateUserSettings(user.id, {
-        ...userSettings,
-        balance: newBalance,
-        current_month_total: newMonthTotal
-      });
-      
-      // Update state
+      // Update user settings state
       setUserSettings(prev => ({
         ...prev,
-        balance: updatedSettings?.balance || newBalance,
-        current_month_total: updatedSettings?.current_month_total || newMonthTotal
+        balance: newBalance,
+        current_month_total: newMonthTotal
       }));
       
       // Update expenses list

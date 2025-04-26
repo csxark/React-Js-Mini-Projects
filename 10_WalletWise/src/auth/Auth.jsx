@@ -1,147 +1,222 @@
 import React, { useState } from 'react';
-import { useAuth } from './../contexts/AuthContext';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { PiggyBank } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
-const Auth = () => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+export const Auth = () => {
+  const [isLogin, setIsLogin] = useState(true);
+  const [formData, setFormData] = useState({
+    name: '',
+    username: '',
+    email: '',
+    password: '',
+    confirmPassword: '',
+    savings_target: 0
+  });
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [mode, setMode] = useState('login');
-  const { signIn, signUp } = useAuth();
+  const { login, register } = useAuth();
 
-  const handleAuth = async (e) => {
-    e.preventDefault();
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const validateForm = () => {
     setError('');
-    setLoading(true);
+    
+    if (!isLogin) {
+      if (formData.password !== formData.confirmPassword) {
+        setError('Passwords do not match');
+        return false;
+      }
+      
+      if (!formData.name.trim()) {
+        setError('Name is required');
+        return false;
+      }
+    }
+    
+    if (!formData.username.trim()) {
+      setError('Username is required');
+      return false;
+    }
+    
+    if (!formData.password.trim()) {
+      setError('Password is required');
+      return false;
+    }
+    
+    if (!isLogin && formData.savings_target < 0) {
+      setError('Savings target cannot be negative');
+      return false;
+    }
+    
+    return true;
+  };
 
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!validateForm()) {
+      return;
+    }
+    
     try {
-      if (mode === 'login') {
-        const { error } = await signIn(email, password);
-        if (error) throw error;
+      if (isLogin) {
+        await login(formData.username, formData.password);
       } else {
-        const { error } = await signUp(email, password);
-        if (error) throw error;
+        // For registration, construct proper user data object
+        const userData = {
+          username: formData.username,
+          email: formData.email || `${formData.username}@walletwise.com`,
+          password: formData.password,
+          name: formData.name,
+          savings_target: parseFloat(formData.savings_target)
+        };
+        await register(userData);
       }
     } catch (error) {
-      setError(error.message || 'An error occurred during authentication.');
-    } finally {
-      setLoading(false);
+      setError(error.message || 'Authentication failed');
     }
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-950 p-4">
-      <Card className="w-full max-w-md border-slate-800 bg-slate-900">
-        <CardHeader className="space-y-1 flex flex-col items-center">
-          <div className="flex items-center gap-2 mb-2">
-            <PiggyBank className="h-10 w-10 text-purple-500" />
-            <CardTitle className="text-2xl font-bold text-white">GrowthQuest</CardTitle>
+    <div className="min-h-screen flex items-center justify-center bg-slate-900 p-4">
+      <div className="w-full max-w-md bg-slate-800 rounded-lg shadow-lg p-6">
+        <h2 className="text-2xl font-bold text-center text-white mb-6">
+          {isLogin ? 'Login to Your Account' : 'Create a New Account'}
+        </h2>
+        
+        {error && (
+          <div className="mb-4 p-3 bg-red-900/50 border border-red-500 rounded text-red-200">
+            {error}
           </div>
-          <CardDescription className="text-slate-400">
-            {mode === 'login' ? 'Enter your credentials to sign in' : 'Create an account to get started'}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Tabs defaultValue="login" className="w-full" onValueChange={setMode}>
-            <TabsList className="grid w-full grid-cols-2 mb-6 bg-slate-800">
-              <TabsTrigger value="login" className="data-[state=active]:bg-slate-700">Login</TabsTrigger>
-              <TabsTrigger value="register" className="data-[state=active]:bg-slate-700">Register</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="login">
-              <form onSubmit={handleAuth} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="login-email" className="text-slate-200">Email</Label>
-                  <Input
-                    id="login-email"
-                    type="email"
-                    placeholder="you@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                    className="bg-slate-800 border-slate-700 text-slate-200 focus:border-purple-500 focus:ring-purple-500"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="login-password" className="text-slate-200">Password</Label>
-                  <Input
-                    id="login-password"
-                    type="password"
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    className="bg-slate-800 border-slate-700 text-slate-200 focus:border-purple-500 focus:ring-purple-500"
-                  />
-                </div>
-
-                {error && (
-                  <div className="rounded-md bg-red-950 border border-red-800 p-3 text-sm text-red-200">
-                    {error}
-                  </div>
-                )}
-
-                <Button 
-                  type="submit" 
-                  className="w-full bg-purple-600 hover:bg-purple-700 text-white font-medium" 
-                  disabled={loading}
-                >
-                  {loading ? 'Processing...' : 'Sign In'}
-                </Button>
-              </form>
-            </TabsContent>
-
-            <TabsContent value="register">
-              <form onSubmit={handleAuth} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="register-email" className="text-slate-200">Email</Label>
-                  <Input
-                    id="register-email"
-                    type="email"
-                    placeholder="you@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                    className="bg-slate-800 border-slate-700 text-slate-200 focus:border-purple-500 focus:ring-purple-500"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="register-password" className="text-slate-200">Password</Label>
-                  <Input
-                    id="register-password"
-                    type="password"
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    className="bg-slate-800 border-slate-700 text-slate-200 focus:border-purple-500 focus:ring-purple-500"
-                  />
-                </div>
-
-                {error && (
-                  <div className="rounded-md bg-red-950 border border-red-800 p-3 text-sm text-red-200">
-                    {error}
-                  </div>
-                )}
-
-                <Button 
-                  type="submit" 
-                  className="w-full bg-purple-600 hover:bg-purple-700 text-white font-medium" 
-                  disabled={loading}
-                >
-                  {loading ? 'Processing...' : 'Sign Up'}
-                </Button>
-              </form>
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-      </Card>
+        )}
+        
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {!isLogin && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Name
+                </label>
+                <input
+                  type="text"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleChange}
+                  className="w-full p-2 bg-slate-700 border border-slate-600 rounded text-white"
+                  placeholder="Your full name"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Email (Optional)
+                </label>
+                <input
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  className="w-full p-2 bg-slate-700 border border-slate-600 rounded text-white"
+                  placeholder="your@email.com"
+                />
+              </div>
+            </>
+          )}
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">
+              Username
+            </label>
+            <input
+              type="text"
+              name="username"
+              value={formData.username}
+              onChange={handleChange}
+              className="w-full p-2 bg-slate-700 border border-slate-600 rounded text-white"
+              placeholder="Username"
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">
+              Password
+            </label>
+            <input
+              type="password"
+              name="password"
+              value={formData.password}
+              onChange={handleChange}
+              className="w-full p-2 bg-slate-700 border border-slate-600 rounded text-white"
+              placeholder="••••••••"
+            />
+          </div>
+          
+          {!isLogin && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Confirm Password
+                </label>
+                <input
+                  type="password"
+                  name="confirmPassword"
+                  value={formData.confirmPassword}
+                  onChange={handleChange}
+                  className="w-full p-2 bg-slate-700 border border-slate-600 rounded text-white"
+                  placeholder="••••••••"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Monthly Savings Target (₹)
+                </label>
+                <input
+                  type="number"
+                  name="savings_target"
+                  value={formData.savings_target}
+                  onChange={handleChange}
+                  className="w-full p-2 bg-slate-700 border border-slate-600 rounded text-white"
+                  placeholder="0"
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+            </>
+          )}
+          
+          <button
+            type="submit"
+            className="w-full py-2 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-medium transition duration-200"
+          >
+            {isLogin ? 'Sign In' : 'Create Account'}
+          </button>
+        </form>
+        
+        <div className="mt-4 text-center">
+          <button
+            onClick={() => {
+              setIsLogin(!isLogin);
+              setError('');
+              setFormData({
+                name: '',
+                username: '',
+                email: '',
+                password: '',
+                confirmPassword: '',
+                savings_target: 0
+              });
+            }}
+            className="text-emerald-400 hover:text-emerald-300 text-sm"
+          >
+            {isLogin ? "Don't have an account? Sign up" : "Already have an account? Sign in"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 };

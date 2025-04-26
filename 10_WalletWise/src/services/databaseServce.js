@@ -1,449 +1,416 @@
 import { supabase } from '../lib/supabase';
 import bcrypt from 'bcryptjs';
 
-// User Authentication and Registration
+/**
+ * Register a new user in the database
+ * @param {Object} userData - User data including email, password, and name
+ * @returns {Promise} - Created user data
+ */
 export const registerUser = async (userData) => {
-  const { name, email, password } = userData;
-  
-  // First create auth user to get the UUID
-  const { data: authData, error: authError } = await supabase.auth.signUp({
-    email,
-    password
-  });
-
-  if (authError) throw authError;
-  
-  // Use the auth UUID as username
-  const username = authData.user.id;
-
-  // Hash password for additional security
-  const saltRounds = 10;
-  const password_hash = await bcrypt.hash(password, saltRounds);
-  
-  // Insert user credentials
-  const { data: userCredentials, error: userError } = await supabase
-    .from('user_credentials')
-    .insert([{
-      name,
-      username,
-      email,
-      password_hash
-    }])
-    .select();
-  
-  if (userError) throw userError;
-  
-  // Initialize user balance
-  const { error: balanceError } = await supabase
-    .from('user_balance')
-    .insert([{
-      username,
-      current_balance: 0
-    }]);
-  
-  if (balanceError) throw balanceError;
-  
-  // Initialize default savings history
-  await initializeDefaultSavings(username);
-  
-  return userCredentials[0];
-};
-
-// Core expense and savings management functions
-export const getUserExpenses = async (username, options = {}) => {
-  const { startDate, endDate, category, limit = 50, offset = 0 } = options;
-  
-  let query = supabase
-    .from('expenses')
-    .select('*')
-    .eq('username', username)
-    .order('date', { ascending: false })
-    .order('time', { ascending: false });
-  
-  if (startDate) {
-    query = query.gte('date', startDate);
-  }
-  
-  if (endDate) {
-    query = query.lte('date', endDate);
-  }
-  
-  if (category) {
-    query = query.eq('category', category);
-  }
-
-  if (offset > 0) {
-    query = query.offset(offset);
-  }
-
-  if (limit > 0) {
-    query = query.limit(limit);
-  }
-  
-  const { data, error } = await query;
-  
-  if (error) throw error;
-  return data;
-};
-
-export const getExpenseCategories = async (username) => {
-  const { data, error } = await supabase
-    .from('expenses')
-    .select('category')
-    .eq('username', username)
-    .order('category');
-  
-  if (error) throw error;
-  
-  // Extract unique categories
-  const categories = [...new Set(data.map(item => item.category))];
-  return categories;
-};
-
-export const addExpense = async (username, expenseData) => {
-  const { data: expense, error: expenseError } = await supabase
-    .from('expenses')
-    .insert([{ 
-      ...expenseData, 
-      username,
-      time: new Date().toLocaleTimeString(),
-      created_at: new Date().toISOString()
-    }])
-    .select();
-  
-  if (expenseError) throw expenseError;
-  
-  // Update user balance
-  await updateBalanceAfterExpense(username, expenseData.amount);
-  
-  // Update monthly savings
-  await updateMonthlySavings(username, expenseData.date);
-  
-  return expense[0];
-};
-
-export const updateExpense = async (username, expenseId, updatedData) => {
-  // Get current expense to calculate balance difference
-  const { data: currentExpense, error: fetchError } = await supabase
-    .from('expenses')
-    .select('amount, date')
-    .eq('id', expenseId)
-    .eq('username', username)
-    .maybeSingle();
-  
-  if (fetchError) throw fetchError;
-  if (!currentExpense) throw new Error('Expense not found');
-  
-  // Update expense
-  const { data: expense, error: updateError } = await supabase
-    .from('expenses')
-    .update(updatedData)
-    .eq('id', expenseId)
-    .eq('username', username)
-    .select();
-  
-  if (updateError) throw updateError;
-  
-  // If amount changed, update balance
-  if (updatedData.amount !== undefined && updatedData.amount !== currentExpense.amount) {
-    const amountDifference = currentExpense.amount - updatedData.amount;
-    await updateBalanceByDifference(username, amountDifference);
-  }
-  
-  // If date changed, update both months' savings data
-  if (updatedData.date !== undefined && updatedData.date !== currentExpense.date) {
-    await updateMonthlySavings(username, currentExpense.date);
-    await updateMonthlySavings(username, updatedData.date);
-  } else if (updatedData.amount !== undefined) {
-    // If only amount changed, update the month's savings
-    await updateMonthlySavings(username, currentExpense.date);
-  }
-  
-  return expense[0];
-};
-
-export const deleteExpense = async (username, expenseId) => {
-  // Get expense details first
-  const { data: expense, error: fetchError } = await supabase
-    .from('expenses')
-    .select('*')
-    .eq('id', expenseId)
-    .eq('username', username)
-    .maybeSingle();
-  
-  if (fetchError) throw fetchError;
-  if (!expense) throw new Error('Expense not found');
-  
-  // Delete the expense
-  const { error: deleteError } = await supabase
-    .from('expenses')
-    .delete()
-    .eq('id', expenseId)
-    .eq('username', username);
-  
-  if (deleteError) throw deleteError;
-  
-  // Add the expense amount back to the balance
-  await updateBalanceByDifference(username, expense.amount);
-  
-  // Update monthly savings
-  await updateMonthlySavings(username, expense.date);
-  
-  return { success: true, deletedExpense: expense };
-};
-
-// Balance Management
-export const getUserBalance = async (username) => {
-  // First ensure user_credentials exists
-  const { data: credentials } = await supabase
-    .from('user_credentials')
-    .select('username')
-    .eq('username', username)
-    .single();
-
-  if (!credentials) {
-    throw new Error('User credentials not found');
-  }
-
-  const { data, error } = await supabase
-    .from('user_balance')
-    .select('current_balance')
-    .eq('username', username)
-    .maybeSingle();
-  
-  if (error) throw error;
-  return data;
-};
-
-const updateUserBalance = async (username, newBalance) => {
   try {
-    // Try to get user credentials
-    const { data: credentials } = await supabase
-      .from('user_credentials')
-      .select('username')
-      .eq('username', username)
-      .single();
+    const { email, password, name, savings_target } = userData;
+    
+    // First register with Supabase Auth
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          name: name,
+          savings_target: savings_target || 0
+        }
+      }
+    });
+    
+    if (authError) throw authError;
 
-    // If no credentials exist, create them
-    if (!credentials) {
-      // Get user email from auth
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('No authenticated user found');
+    // Wait for session to be established
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) throw sessionError;
 
-      // Create user credentials
-      await supabase.from('user_credentials').insert([{
-        username: user.id,
-        name: user.email.split('@')[0],
-        email: user.email,
-        password_hash: 'oauth'
-      }]);
+    // Get access token
+    const accessToken = session?.access_token;
+    if (!accessToken) {
+      throw new Error('No access token available');
     }
 
-    // Update or create balance record
+    // Configure client with access token
+    const supabaseClient = supabase.auth.setSession({
+      access_token: accessToken,
+      refresh_token: session.refresh_token
+    });
+
+    const username = email.split('@')[0];
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+    
+    // Create user profile
     const { data, error } = await supabase
-      .from('user_balance')
-      .upsert([{
+      .from('user_credentials')
+      .insert([{ 
+        id: authData.user.id,
+        name, 
         username,
-        current_balance: newBalance,
-        updated_at: new Date().toISOString()
+        email,
+        password_hash: hashedPassword,
+        savings_target: savings_target || 0
       }])
       .select();
     
     if (error) throw error;
-    return data[0];
+    
+    // Initialize user balance and savings
+    const now = new Date();
+    const month = now.toLocaleString('default', { month: 'long' });
+    const monthNum = now.getMonth() + 1;
+    const year = now.getFullYear();
+
+    await Promise.all([
+      supabase
+        .from('user_balance')
+        .insert([{
+          username,
+          current_balance: 0,
+          min_monthly_balance: 0
+        }]),
+      supabase
+        .from('savings')
+        .insert([{
+          username,
+          month,
+          month_num: monthNum,
+          year,
+          savings_amount: 0,
+          monthly_balance: 0,
+          expenses_count: 0
+        }])
+    ]);
+    
+    return data;
   } catch (error) {
-    console.error('Error in updateUserBalance:', error);
+    console.error('Error registering user:', error);
     throw error;
   }
 };
 
-const updateBalanceAfterExpense = async (username, expenseAmount) => {
-  const currentBalance = await getUserBalance(username);
-  if (!currentBalance) throw new Error('User balance not found');
-  
-  const newBalance = currentBalance.current_balance - parseFloat(expenseAmount);
-  await updateUserBalance(username, newBalance);
-};
-
-const updateBalanceByDifference = async (username, amountDifference) => {
-  const currentBalance = await getUserBalance(username);
-  if (!currentBalance) throw new Error('User balance not found');
-  
-  const newBalance = currentBalance.current_balance + parseFloat(amountDifference);
-  await updateUserBalance(username, newBalance);
-};
-
-// Savings Management
-export const getSavingsByMonth = async (username, month, year) => {
-  const { data, error } = await supabase
-    .from('savings')
-    .select('*')
-    .eq('username', username)
-    .eq('month_num', month)
-    .eq('year', year)
-    .maybeSingle();
-  
-  if (error) throw error;
-  return data;
-};
-
-const initializeDefaultSavings = async (username) => {
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const currentDate = new Date();
-  const currentYear = currentDate.getFullYear();
-  const currentMonth = currentDate.getMonth();
-  
-  // Create savings records for the past 6 months
-  const savingsRecords = [];
-  for (let i = 0; i < 6; i++) {
-    const targetDate = new Date(currentYear, currentMonth - i, 1);
-    const month = months[targetDate.getMonth()];
-    const monthNum = targetDate.getMonth();
-    const year = targetDate.getFullYear();
+/**
+ * Find user by username
+ * @param {string} username - Username
+ * @returns {Promise} - User data
+ */
+export const findUserByUsername = async (username) => {
+  try {
+    const { data, error } = await supabase
+      .from('user_credentials')
+      .select('*')
+      .eq('username', username)
+      .single();
     
-    savingsRecords.push({
-      username,
-      month,
-      month_num: monthNum,
-      year,
-      savings_amount: 0,
-      monthly_balance: 0,
-      expenses_count: 0
-    });
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error finding user:', error);
+    return null;
   }
-  
-  const { error } = await supabase
-    .from('savings')
-    .upsert(savingsRecords);
-  
-  if (error) throw error;
-  return savingsRecords;
 };
 
-const updateMonthlySavings = async (username, dateString) => {
-  const expenseDate = new Date(dateString);
-  const month = expenseDate.getMonth();
-  const year = expenseDate.getFullYear();
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  
-  // Get current balance
-  const { data: balanceData, error: balanceError } = await supabase
-    .from('user_balance')
-    .select('current_balance')
-    .eq('username', username)
-    .maybeSingle();
-  
-  if (balanceError) throw balanceError;
-  const currentBalance = balanceData?.current_balance || 0;
-  
-  // Calculate total expenses for the month
-  const startOfMonth = new Date(year, month, 1).toISOString().split('T')[0];
-  const endOfMonth = new Date(year, month + 1, 0).toISOString().split('T')[0];
-  
-  const { data: expenses, error: expensesError } = await supabase
-    .from('expenses')
-    .select('amount')
-    .eq('username', username)
-    .gte('date', startOfMonth)
-    .lte('date', endOfMonth);
-  
-  if (expensesError) throw expensesError;
-  
-  const totalExpenses = expenses.reduce((sum, expense) => sum + parseFloat(expense.amount), 0);
-  const expensesCount = expenses.length;
-  
-  // Update or insert savings record
-  const { error: updateError } = await supabase
-    .from('savings')
-    .upsert([{
-      username,
-      month: months[month],
-      month_num: month,
-      year,
-      savings_amount: currentBalance,
-      monthly_balance: currentBalance,
-      expenses_count: expensesCount,
-      updated_at: new Date()
-    }]);
-  
-  if (updateError) throw updateError;
-  
-  return {
-    month: months[month],
-    year,
-    savings_amount: currentBalance,
-    monthly_balance: currentBalance,
-    expenses_count: expensesCount
-  };
+/**
+ * Get user profile information
+ * @param {string} userId - User ID from Supabase Auth
+ * @returns {Promise} - User profile data
+ */
+export const getUserProfile = async (userId) => {
+  try {
+    const { data, error } = await supabase
+      .from('user_credentials')
+      .select('*')
+      .eq('id', userId)
+      .single();
+    
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error getting user profile:', error);
+    throw error;
+  }
 };
 
-// User Settings Management
-export const getUserSettings = async (username) => {
-  if (!username) {
-    console.error('Username is required for getUserSettings');
-    return DEFAULT_USER_SETTINGS;
+/**
+ * Update user profile information
+ * @param {string} userId - User ID from Supabase Auth
+ * @param {Object} profileData - Updated profile data
+ * @returns {Promise} - Updated user data
+ */
+export const updateUserProfile = async (userId, profileData) => {
+  try {
+    const { data, error } = await supabase
+      .from('user_credentials')
+      .update(profileData)
+      .eq('id', userId)
+      .select();
+    
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error updating user profile:', error);
+    throw error;
   }
+};
+
+/**
+ * Get user's current balance
+ * @param {string} username - Username
+ * @returns {Promise} - Balance data
+ */
+export const getUserBalance = async (username) => {
+  try {
+    const { data, error } = await supabase
+      .from('user_balance')
+      .select('*')
+      .eq('username', username)
+      .single();
+    
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error getting user balance:', error);
+    throw error;
+  }
+};
+
+/**
+ * Update user's balance
+ * @param {string} username - Username
+ * @param {number} amount - New balance amount
+ * @returns {Promise} - Updated balance data
+ */
+export const updateUserBalance = async (username, newBalance) => {
+  try {
+    const { data, error } = await supabase
+      .from('user_balance')
+      .update({ 
+        current_balance: newBalance,
+        updated_at: new Date().toISOString()
+      })
+      .eq('username', username)
+      .select();
+    
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error updating balance:', error);
+    throw error;
+  }
+};
+
+/**
+ * Update user's minimum monthly balance
+ * @param {string} username - Username
+ * @param {number} minBalance - New minimum monthly balance
+ * @returns {Promise} - Updated balance data
+ */
+export const updateMinMonthlyBalance = async (username, minBalance) => {
+  try {
+    const { data, error } = await supabase
+      .from('user_balance')
+      .update({ 
+        min_monthly_balance: minBalance,
+        updated_at: new Date().toISOString()
+      })
+      .eq('username', username)
+      .select();
+    
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error updating minimum balance:', error);
+    throw error;
+  }
+};
+
+/**
+ * Add a new expense
+ * @param {Object} expenseData - Expense data
+ * @returns {Promise} - Created expense data
+ */
+export const addExpense = async (expenseData) => {
+  const { username, category, amount, description, date } = expenseData;
 
   try {
-    const [balanceResult, savingsDataResult] = await Promise.all([
-      getUserBalance(username).catch(() => null),
-      getSavingsByMonth(
-        username, 
-        new Date().getMonth(),
-        new Date().getFullYear()
-      ).catch(() => null)
-    ]);
+    // Start a transaction by getting current balance
+    const { data: balanceData, error: balanceError } = await supabase
+      .from('user_balance')
+      .select('current_balance')
+      .eq('username', username)
+      .single();
+    
+    if (balanceError) throw balanceError;
 
-    return {
-      balance: balanceResult?.current_balance || 0,
-      savings: savingsDataResult?.savings_amount || 0,
-      min_monthly_balance: balanceResult?.min_monthly_balance || 0,
-      current_month_total: savingsDataResult?.expenses_total || 0,
-      previous_month_total: savingsDataResult?.previous_month_total || 0
-    };
+    const newBalance = balanceData.current_balance - amount;
+    const now = new Date();
+
+    // Add expense with proper date and time
+    const { data: expense, error: expenseError } = await supabase
+      .from('expenses')
+      .insert([{
+        username,
+        category,
+        amount,
+        date: date || now.toISOString().split('T')[0],
+        time: now.toTimeString().split(' ')[0]
+      }])
+      .select()
+      .single();
+    
+    if (expenseError) throw expenseError;
+
+    // Update balance
+    const { error: updateError } = await supabase
+      .from('user_balance')
+      .update({ 
+        current_balance: newBalance,
+        updated_at: now.toISOString()
+      })
+      .eq('username', username);
+    
+    if (updateError) throw updateError;
+
+    // Update monthly savings
+    const month = now.toLocaleString('default', { month: 'long' });
+    const monthNum = now.getMonth() + 1;
+    const year = now.getFullYear();
+
+    const { data: savings, error: savingsError } = await supabase
+      .from('savings')
+      .select('*')
+      .eq('username', username)
+      .eq('month_num', monthNum)
+      .eq('year', year)
+      .single();
+
+    if (savingsError && savingsError.code !== 'PGRST116') { // Not found error
+      throw savingsError;
+    }
+
+    if (!savings) {
+      await supabase
+        .from('savings')
+        .insert([{
+          username,
+          month,
+          month_num: monthNum,
+          year,
+          savings_amount: 0,
+          monthly_balance: newBalance,
+          expenses_count: 1
+        }]);
+    } else {
+      await supabase
+        .from('savings')
+        .update({
+          expenses_count: savings.expenses_count + 1,
+          monthly_balance: newBalance,
+          updated_at: now.toISOString()
+        })
+        .eq('id', savings.id);
+    }
+
+    return expense;
   } catch (error) {
-    console.error('Error in getUserSettings:', error);
-    return {
-      balance: 0,
-      savings: 0,
-      min_monthly_balance: 0,
-      current_month_total: 0,
-      previous_month_total: 0
-    };
+    console.error('Error adding expense:', error);
+    throw error;
   }
 };
 
-export const updateUserSettings = async (username, settings) => {
-  const { balance, min_monthly_balance, ...otherSettings } = settings;
-  
-  // Update balance if provided
-  if (balance !== undefined) {
-    await updateUserBalance(username, balance);
+/**
+ * Get user expenses
+ * @param {string} username - Username
+ * @param {Object} filters - Optional filters
+ * @returns {Promise} - Expenses data
+ */
+export const getUserExpenses = async (username, filters = {}) => {
+  try {
+    let query = supabase
+      .from('expenses')
+      .select('*')
+      .eq('username', username);
+    
+    // Apply filters if provided
+    if (filters.category) {
+      query = query.eq('category', filters.category);
+    }
+    
+    if (filters.startDate) {
+      query = query.gte('date', filters.startDate);
+    }
+    
+    if (filters.endDate) {
+      query = query.lte('date', filters.endDate);
+    }
+    
+    // Order by date and time
+    const { data, error } = await query
+      .order('date', { ascending: false })
+      .order('time', { ascending: false });
+    
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error getting user expenses:', error);
+    throw error;
   }
-
-  // Update other settings in user profile
-  const { data, error } = await supabase
-    .from('user_credentials')
-    .update({
-      min_monthly_balance,
-      ...otherSettings,
-      updated_at: new Date()
-    })
-    .eq('username', username)
-    .select();
-
-  if (error) throw error;
-  return settings;
 };
 
-export const getUserSavingsHistory = async (username) => {
-  const { data, error } = await supabase
-    .from('savings')
-    .select('*')
-    .eq('username', username)
-    .order('year', { ascending: false })
-    .order('month_num', { ascending: false });
-  
-  if (error) throw error;
-  return data;
+/**
+ * Get user savings data
+ * @param {string} username - Username
+ * @param {number} year - Optional year filter
+ * @returns {Promise} - Savings data
+ */
+export const getUserSavings = async (username, year = null) => {
+  try {
+    let query = supabase
+      .from('savings')
+      .select('*')
+      .eq('username', username);
+    
+    if (year) {
+      query = query.eq('year', year);
+    }
+    
+    const { data, error } = await query
+      .order('year', { ascending: false })
+      .order('month_num', { ascending: false });
+    
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error getting user savings:', error);
+    throw error;
+  }
+};
+
+/**
+ * Update user savings target
+ * @param {string} username - Username
+ * @param {number} target - New savings target
+ * @returns {Promise} - Updated user data
+ */
+export const updateSavingsTarget = async (username, target) => {
+  try {
+    const { data, error } = await supabase
+      .from('user_credentials')
+      .update({ 
+        savings_target: target,
+        updated_at: new Date().toISOString()
+      })
+      .eq('username', username)
+      .select();
+    
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error updating savings target:', error);
+    throw error;
+  }
 };

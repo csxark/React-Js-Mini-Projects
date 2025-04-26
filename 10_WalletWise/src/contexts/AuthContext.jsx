@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { registerUser } from '../services/databaseServce';
+import { registerUser, findUserByUsername } from '../services/databaseServce';
 
 const AuthContext = createContext();
 
@@ -11,19 +11,22 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Check for existing session and set up auth state listener
     const initializeAuth = async () => {
       try {
         const { data: { session }, error } = await supabase.auth.getSession();
+        if (error) throw error;
         
-        if (error) {
-          console.error('Error getting session:', error);
-          setLoading(false);
-          return;
+        if (session?.user) {
+          // Get additional user data from our database
+          const userData = await findUserByUsername(session.user.email.split('@')[0]);
+          setUser({ ...session.user, ...userData });
+        } else {
+          setUser(null);
         }
-        
-        setUser(session?.user || null);
       } catch (error) {
-        console.error('Error in auth initialization:', error);
+        console.error('Error initializing auth:', error);
+        setUser(null);
       } finally {
         setLoading(false);
       }
@@ -31,43 +34,72 @@ export const AuthProvider = ({ children }) => {
 
     initializeAuth();
 
+    // Set up auth state change listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
-        setUser(session?.user || null);
+        if (session?.user) {
+          const userData = await findUserByUsername(session.user.email.split('@')[0]);
+          setUser({ ...session.user, ...userData });
+        } else {
+          setUser(null);
+        }
+        setLoading(false);
       }
     );
 
     return () => subscription?.unsubscribe();
   }, []);
 
-  const signUp = async (email, password) => {
+  const login = async (username, password) => {
     try {
-      // Register user with both auth and database
-      const userData = await registerUser({ email, password, name: email.split('@')[0] });
+      // Construct email if not provided
+      const email = username.includes('@') ? username : `${username}@walletwise.com`;
       
-      if (!userData) {
-        throw new Error('Failed to create user account');
-      }
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+      
+      if (error) throw error;
 
-      return { user: userData };
+      // Get additional user data
+      const userData = await findUserByUsername(email.split('@')[0]);
+      setUser({ ...data.user, ...userData });
+
+      return data;
     } catch (error) {
-      console.error('Error in signUp:', error);
+      console.error('Error in login:', error);
       throw error;
     }
   };
 
-  const signIn = async (email, password) => {
+  const register = async (userData) => {
     try {
-      return await supabase.auth.signInWithPassword({ email, password });
+      const { username, email, password, name, savings_target } = userData;
+      
+      // Register user in both auth and database
+      const registeredData = await registerUser({
+        email: email || `${username}@walletwise.com`,
+        password,
+        name: name || username,
+        savings_target: parseFloat(savings_target) || 0
+      });
+
+      // Auto login after registration
+      await login(username, password);
+      
+      return registeredData;
     } catch (error) {
-      console.error('Error in signIn:', error);
+      console.error('Error in register:', error);
       throw error;
     }
   };
 
   const signOut = async () => {
     try {
-      return await supabase.auth.signOut();
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      setUser(null);
     } catch (error) {
       console.error('Error in signOut:', error);
       throw error;
@@ -77,11 +109,10 @@ export const AuthProvider = ({ children }) => {
   const value = {
     user,
     loading,
-    signUp,
-    signIn,
+    login,
+    register,
     signOut
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
-
